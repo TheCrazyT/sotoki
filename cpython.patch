@@ -1,0 +1,105 @@
+diff --git a/Modules/pyexpat.c b/Modules/pyexpat.c
+index df1a69b653..0845ebedb5 100644
+--- a/Modules/pyexpat.c
++++ b/Modules/pyexpat.c
+@@ -1155,6 +1155,8 @@ newxmlparseobject(const char *encoding, const char *namespace_separator, PyObjec
+     return (PyObject*)self;
+ }
+ 
++static int
++xmlparse_clear(xmlparseobject *op);
+ 
+ static void
+ xmlparse_dealloc(xmlparseobject *self)
+@@ -1164,6 +1166,7 @@ xmlparse_dealloc(xmlparseobject *self)
+     if (self->itself != NULL)
+         XML_ParserFree(self->itself);
+     self->itself = NULL;
++	(void)xmlparse_clear(self);
+ 
+     if (self->handlers != NULL) {
+         for (i = 0; handler_info[i].name != NULL; i++)
+@@ -1175,7 +1178,7 @@ xmlparse_dealloc(xmlparseobject *self)
+         PyMem_Free(self->buffer);
+         self->buffer = NULL;
+     }
+-    Py_XDECREF(self->intern);
++    
+     PyObject_GC_Del(self);
+ }
+ 
+@@ -1448,8 +1451,10 @@ static int
+ xmlparse_traverse(xmlparseobject *op, visitproc visit, void *arg)
+ {
+     int i;
+-    for (i = 0; handler_info[i].name != NULL; i++)
++    for (i = 0; handler_info[i].name != NULL; i++) {
+         Py_VISIT(op->handlers[i]);
++	}
++	Py_VISIT(Py_TYPE(op));
+     return 0;
+ }
+ 
+diff --git a/Modules/unicodedata.c b/Modules/unicodedata.c
+index 5e8ba602d6..f5d1a44438 100644
+--- a/Modules/unicodedata.c
++++ b/Modules/unicodedata.c
+@@ -99,12 +99,13 @@ new_previous_version(const char*name, const change_record* (*getrecord)(Py_UCS4)
+                      Py_UCS4 (*normalization)(Py_UCS4))
+ {
+         PreviousDBVersion *self;
+-        self = PyObject_New(PreviousDBVersion, &UCD_Type);
++        self = PyObject_GC_New(PreviousDBVersion, &UCD_Type);
+         if (self == NULL)
+                 return NULL;
+         self->name = name;
+         self->getrecord = getrecord;
+         self->normalization = normalization;
++		PyObject_GC_Track(self);
+         return (PyObject*)self;
+ }
+ 
+@@ -1383,6 +1384,22 @@ static PyMethodDef unicodedata_functions[] = {
+     {NULL, NULL}                /* sentinel */
+ };
+ 
++static int
++ucd_traverse(PreviousDBVersion *self, visitproc visit, void *arg)
++{
++    Py_VISIT(Py_TYPE(self));
++    return 0;
++}
++
++static void
++ucd_dealloc(PreviousDBVersion *self)
++{
++    //PyTypeObject *tp = Py_TYPE(self);
++    PyObject_GC_UnTrack(self);
++    PyObject_GC_Del(self);
++    //Py_DECREF(tp);
++}
++
+ static PyTypeObject UCD_Type = {
+         /* The ob_type field must be initialized in the module init function
+          * to be portable to Windows without using C++. */
+@@ -1391,7 +1408,7 @@ static PyTypeObject UCD_Type = {
+         sizeof(PreviousDBVersion),      /*tp_basicsize*/
+         0,                      /*tp_itemsize*/
+         /* methods */
+-        (destructor)PyObject_Del, /*tp_dealloc*/
++        (destructor)ucd_dealloc, /*tp_dealloc*/
+         0,                      /*tp_vectorcall_offset*/
+         0,                      /*tp_getattr*/
+         0,                      /*tp_setattr*/
+@@ -1406,9 +1423,9 @@ static PyTypeObject UCD_Type = {
+         PyObject_GenericGetAttr,/*tp_getattro*/
+         0,                      /*tp_setattro*/
+         0,                      /*tp_as_buffer*/
+-        Py_TPFLAGS_DEFAULT,     /*tp_flags*/
++        Py_TPFLAGS_DEFAULT | Py_TPFLAGS_HAVE_GC,     /*tp_flags*/
+         0,                      /*tp_doc*/
+-        0,                      /*tp_traverse*/
++        (traverseproc)ucd_traverse,           /*tp_traverse*/
+         0,                      /*tp_clear*/
+         0,                      /*tp_richcompare*/
+         0,                      /*tp_weaklistoffset*/
