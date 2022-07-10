@@ -1,5 +1,16 @@
 FROM redis:6.2.4-buster AS redis
 
+FROM python:3.8 as pybuild
+
+COPY cpython.patch /tmp/cpython.patch
+RUN git clone https://github.com/python/cpython.git
+RUN cd cpython \
+&& git checkout v3.8.0 \
+&& git apply --verbose --ignore-space-change --ignore-whitespace /tmp/cpython.patch
+RUN cd cpython \
+&& ./configure --enable-optimizations --prefix=/usr \
+&& make -j 4 sharedmods
+
 FROM python:3.8-slim
 
 RUN groupadd -r -g 999 redis && useradd -r -g redis -u 999 redis
@@ -71,6 +82,9 @@ exec \"\$@\"\n" > /usr/local/bin/start-redis-daemon && \
 chmod +x /usr/local/bin/start-redis-daemon
 
 RUN mkdir -p /output
+
+COPY --from=pybuild /cpython/build/lib.linux-x86_64-3.8/unicodedata.cpython-38-x86_64-linux-gnu.so /usr/local/lib/python3.8/lib-dynload/unicodedata.cpython-38-x86_64-linux-gnu.so
+COPY --from=pybuild /cpython/build/lib.linux-x86_64-3.8/pyexpat.cpython-38-x86_64-linux-gnu.so /usr/local/lib/python3.8/lib-dynload/pyexpat.cpython-38-x86_64-linux-gnu.so
 
 EXPOSE 6379
 ENTRYPOINT ["start-redis-daemon"]
